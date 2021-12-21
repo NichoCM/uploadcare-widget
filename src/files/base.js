@@ -19,6 +19,7 @@ class BaseFile {
     this.sourceInfo = sourceInfo
     this.fileId = null
     this.fileName = null
+    this.validating = true
     this.sanitizedName = null
     this.fileSize = null
     this.isStored = null
@@ -123,10 +124,11 @@ class BaseFile {
     if (this.s3Bucket && this.cdnUrlModifiers) {
       this.__rejectApi('baddata')
     }
-    this.__runValidators()
-    if (data.is_ready) {
-      return this.__resolveApi()
-    }
+    this.__runValidators().then(() => {
+      if (data.is_ready) {
+        return this.__resolveApi()
+      }
+    })
   }
 
   // Retrieve info
@@ -182,18 +184,21 @@ class BaseFile {
   }
 
   __runValidators() {
-    var err, i, info, len, ref, results, v
+    var i, info, len, ref, promises, v
     info = this.__fileInfo()
+    ref = this.validators
+    promises = []
     try {
-      ref = this.validators
-      results = []
       for (i = 0, len = ref.length; i < len; i++) {
         v = ref[i]
-        results.push(v(info))
+        promises.push(v(info))
       }
-      return results
-    } catch (error) {
-      err = error
+      this.validating = true
+      return Promise.all(promises)
+        .catch(err => this.__rejectApi(err.message))
+        .finally(() => this.validating = false)
+        .catch(e => {})
+    } catch (err) {
       return this.__rejectApi(err.message)
     }
   }
@@ -241,26 +246,27 @@ class BaseFile {
     var op
     if (!this.__apiPromise) {
       this.__apiPromise = this.__extendApi(this.apiDeferred.promise())
-      this.__runValidators()
-      if (this.apiDeferred.state() === 'pending') {
-        op = this.__startUpload()
-        op.done(() => {
-          this.__progressState = 'uploaded'
-          this.__progress = 1
-          this.__notifyApi()
-          return this.__completeUpload()
-        })
-        op.progress((progress) => {
-          if (progress > this.__progress) {
-            this.__progress = progress
-            return this.__notifyApi()
-          }
-        })
-        op.fail((error) => {
-          return this.__rejectApi('upload', error)
-        })
-        this.apiDeferred.always(op.reject)
-      }
+      this.__runValidators().then(() => {
+        if (this.apiDeferred.state() === 'pending') {
+          op = this.__startUpload()
+          op.done(() => {
+            this.__progressState = 'uploaded'
+            this.__progress = 1
+            this.__notifyApi()
+            return this.__completeUpload()
+          })
+          op.progress((progress) => {
+            if (progress > this.__progress) {
+              this.__progress = progress
+              return this.__notifyApi()
+            }
+          })
+          op.fail((error) => {
+            return this.__rejectApi('upload', error)
+          })
+          this.apiDeferred.always(op.reject)
+        }
+      })
     }
     return this.__apiPromise
   }

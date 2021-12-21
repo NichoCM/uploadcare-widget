@@ -12,7 +12,7 @@
 </script>
 
 <p>
-  images only, 500kb max<br />
+  images only, no 'a' in name, 500kb max<br />
   <input type="hidden" data-preview-step role="uploadcare-uploader" />
 </p>
 
@@ -21,7 +21,7 @@
   UPLOADCARE_PUBLIC_KEY = '3a8b645aef4a1b959b88'
   UPLOADCARE_LOCALE_TRANSLATIONS = {
     // messages for widget
-    errors: { fileSize: 'File is too large.' },
+    errors: { fileSize: 'File is too large.', fileName: 'File name contains "a"' },
     // messages for dialog’s error page
     dialog: {
       tabs: {
@@ -30,6 +30,11 @@
             fileSize: {
               title: 'Error.',
               text: 'File is too large.',
+              back: 'Back'
+            },
+            fileName: {
+              title: 'Error.',
+              text: 'File name contains "a".',
               back: 'Back'
             }
           }
@@ -47,6 +52,19 @@
     }
   }
 
+  function asyncFileNameCheck(fileInfo) {
+    return new Promise(function(res, rej) {
+      setTimeout(function() {{
+        if (fileInfo.name.includes('a')) {
+          rej(new Error('fileName'))
+        } else {
+          res()
+        }
+      }}, 100)
+    })
+  }
+
   var widget = uploadcare.Widget('[role=uploadcare-uploader]')
+  widget.validators.push(asyncFileNameCheck)
   widget.validators.push(fileSizeCheck)
 </script>
